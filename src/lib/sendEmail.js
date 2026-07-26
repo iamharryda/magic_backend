@@ -19,10 +19,20 @@ const sendEmail = async ({ to, subject, html }) => {
       },
     });
 
+    const plainText = html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>|<\/div>|<\/h[1-6]>/gi, '\n\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\n\s*\n/g, '\n\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
     const mailOptions = {
-      from: emailFrom,
+      from: `"Magic Initiative" <${emailFrom}>`,
+      replyTo: emailFrom,
       to,
       subject,
+      text: plainText,
       html,
     };
 

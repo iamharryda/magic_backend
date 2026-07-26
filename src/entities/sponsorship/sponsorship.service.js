@@ -4,6 +4,7 @@ import {
   sendSubscriptionSetupEmails,
   sendMonthlyChargeSuccessEmails,
   sendMonthlyChargeFailureEmails,
+  sendSubscriptionSetupFailureEmails,
 } from '../../lib/emailTemplates.js';
 
 const badRequest = (msg) => Object.assign(new Error(msg), { statusCode: 400 });
@@ -15,7 +16,7 @@ export const SponsorshipService = {
    * Charges Month 1 payment upfront and saves the payment method for off-session cron charging.
    * Returns hosted Checkout URL for the frontend.
    */
-  async createSetupCheckoutSession({ sponsorName, sponsorEmail, childId, amount = 30, interval = 'month' }) {
+  async createSetupCheckoutSession({ sponsorName, sponsorEmail, childId, childName, amount = 30, interval = 'month', successUrl, returnUrl }) {
     if (!sponsorEmail) throw badRequest('sponsorEmail is required');
     if (!amount || amount <= 0) throw badRequest('A positive amount is required');
 
@@ -33,6 +34,7 @@ export const SponsorshipService = {
       sponsorName,
       sponsorEmail,
       childId,
+      childName,
       amount,
       currency: CURRENCY,
       interval,
@@ -58,14 +60,16 @@ export const SponsorshipService = {
         metadata: {
           sponsorshipId: String(sponsorship._id),
           childId: childId || '',
+          childName: childName || '',
         },
       },
       metadata: {
         sponsorshipId: String(sponsorship._id),
         childId: childId || '',
+        childName: childName || '',
       },
-      success_url: `${FRONTEND_URL}/sponsorship/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${FRONTEND_URL}/sponsorship/cancel`,
+      success_url: successUrl || `${FRONTEND_URL}/sponsorship/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: returnUrl || `${FRONTEND_URL}/sponsorship/cancel`,
     });
 
     sponsorship.checkoutSessionId = session.id;
@@ -91,16 +95,29 @@ export const SponsorshipService = {
       expand: ['payment_intent.payment_method'],
     });
 
-    if (session.payment_status !== 'paid') {
-      return { paid: false, status: session.payment_status };
-    }
-
     const sponsorshipId = session.metadata?.sponsorshipId;
     const sponsorship = sponsorshipId
       ? await Sponsorship.findById(sponsorshipId)
       : await Sponsorship.findOne({ checkoutSessionId: session.id });
 
     if (!sponsorship) throw notFound('Sponsorship record not found');
+
+    if (session.payment_status !== 'paid') {
+      if (sponsorship.status === 'incomplete') {
+        sponsorship.status = 'canceled';
+        await sponsorship.save();
+        sendSubscriptionSetupFailureEmails({
+          sponsorEmail: sponsorship.sponsorEmail,
+          sponsorName: sponsorship.sponsorName,
+          childId: sponsorship.childId,
+          childName: sponsorship.childName,
+          amount: sponsorship.amount,
+          currency: sponsorship.currency,
+          errorReason: 'Payment setup was not completed or cancelled.',
+        }).catch((err) => console.error('Error sending subscription setup failure emails:', err));
+      }
+      return { paid: false, status: session.payment_status, sponsorship };
+    }
 
     const paymentIntent = typeof session.payment_intent === 'object' ? session.payment_intent : null;
     let paymentMethodId = null;
@@ -134,6 +151,7 @@ export const SponsorshipService = {
         sponsorEmail: sponsorship.sponsorEmail,
         sponsorName: sponsorship.sponsorName,
         childId: sponsorship.childId,
+        childName: sponsorship.childName,
         amount: sponsorship.amount,
         currency: sponsorship.currency,
       }).catch((err) => console.error('Error sending subscription setup emails:', err));
@@ -190,6 +208,7 @@ export const SponsorshipService = {
             sponsorEmail: sponsorship.sponsorEmail,
             sponsorName: sponsorship.sponsorName,
             childId: sponsorship.childId,
+            childName: sponsorship.childName,
             amount: sponsorship.amount,
             currency: sponsorship.currency,
           }).catch((err) => console.error('Error sending monthly charge success emails:', err));
@@ -207,6 +226,7 @@ export const SponsorshipService = {
           sponsorEmail: sponsorship.sponsorEmail,
           sponsorName: sponsorship.sponsorName,
           childId: sponsorship.childId,
+          childName: sponsorship.childName,
           amount: sponsorship.amount,
           currency: sponsorship.currency,
           errorReason: error.message,
@@ -231,4 +251,19 @@ export const SponsorshipService = {
     if (!sponsorship) throw notFound('Sponsorship not found');
     return { status: sponsorship.status, sponsorship };
   },
+
+  async list({ filter, skip, limit, page }) {
+    const total = await Sponsorship.countDocuments(filter);
+    const sponsorships = await Sponsorship.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    return {
+      sponsorships,
+      page,
+      totalPages: Math.ceil(total / limit),
+      total
+    };
+  }
 };

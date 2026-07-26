@@ -6,6 +6,7 @@ const sponsorshipSchema = new mongoose.Schema(
     sponsorEmail: { type: String, trim: true, lowercase: true, required: true },
 
     childId: { type: String, index: true },
+    childName: { type: String },
 
     amount: { type: Number, required: true }, // monthly amount in major units
     currency: { type: String, default: 'usd' },

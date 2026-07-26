@@ -1,5 +1,6 @@
 import express from 'express';
 import { SponsorshipController } from './sponsorship.controller.js';
+import { verifyToken, userAdminMiddleware } from '../../core/middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -18,5 +19,8 @@ router.post('/:id/cancel', SponsorshipController.cancel);
 
 // Get current sponsorship status
 router.get('/:id/status', SponsorshipController.status);
+
+// List all sponsorships (paginated, Admin only)
+router.get('/', verifyToken, userAdminMiddleware, SponsorshipController.list);
 
 export default router;

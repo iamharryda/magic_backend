@@ -1,13 +1,13 @@
 import { stripe, CURRENCY, FRONTEND_URL, toMinorUnits } from '../../core/config/stripe.js';
 import Donation from './donation.model.js';
-import { sendDonationEmails } from '../../lib/emailTemplates.js';
+import { sendDonationEmails, sendDonationFailureEmails } from '../../lib/emailTemplates.js';
 
 export const DonationService = {
   /**
    * Create a Checkout Session for a one-time donation + a pending record.
    * Returns the hosted Checkout URL for the frontend to redirect to.
    */
-  async createCheckout({ donorName, donorEmail, amount, message }) {
+  async createCheckout({ donorName, donorEmail, amount, message, successUrl, returnUrl }) {
     if (!amount || amount <= 0) {
       const e = new Error('A positive amount is required');
       e.statusCode = 400;
@@ -38,8 +38,8 @@ export const DonationService = {
       ],
       payment_intent_data: { metadata: { donationId: String(donation._id) } },
       metadata: { donationId: String(donation._id) },
-      success_url: `${FRONTEND_URL}/donation/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${FRONTEND_URL}/donation/cancel`,
+      success_url: successUrl || `${FRONTEND_URL}/donation/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: returnUrl || `${FRONTEND_URL}/donation/cancel`,
     });
 
     donation.checkoutSessionId = session.id;
@@ -70,7 +70,7 @@ export const DonationService = {
         : session.payment_intent?.id;
 
     const donationId = session.metadata?.donationId;
-    const update = { status: paid ? 'paid' : 'pending', paymentIntentId };
+    const update = { status: paid ? 'paid' : 'failed', paymentIntentId };
 
     const previousDonation = donationId
       ? await Donation.findById(donationId)
@@ -89,8 +89,31 @@ export const DonationService = {
         currency: donation.currency || CURRENCY,
         message: donation.message,
       }).catch((err) => console.error('Error sending donation emails:', err));
+    } else if (!paid && previousDonation?.status !== 'failed' && donation) {
+      sendDonationFailureEmails({
+        donorEmail: donation.donorEmail || session.customer_details?.email,
+        donorName: donation.donorName || session.customer_details?.name,
+        amount: donation.amount,
+        currency: donation.currency || CURRENCY,
+        errorReason: 'Payment was not completed or cancelled.',
+      }).catch((err) => console.error('Error sending donation failure emails:', err));
     }
 
     return { paid, status: session.payment_status, donation };
   },
+
+  async list({ filter, skip, limit, page }) {
+    const total = await Donation.countDocuments(filter);
+    const donations = await Donation.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    return {
+      donations,
+      page,
+      totalPages: Math.ceil(total / limit),
+      total
+    };
+  }
 };
