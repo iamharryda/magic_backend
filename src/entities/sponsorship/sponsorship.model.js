@@ -14,6 +14,7 @@ const sponsorshipSchema = new mongoose.Schema(
     stripeCustomerId: { type: String, index: true },
     stripeSubscriptionId: { type: String, index: true },
     defaultPaymentMethodId: { type: String },
+    checkoutSessionId: { type: String, index: true },
 
     status: {
       type: String,
@@ -22,6 +23,7 @@ const sponsorshipSchema = new mongoose.Schema(
     },
 
     lastPaymentAt: { type: Date },
+    nextBillingDate: { type: Date, index: true },
     metadata: { type: Object, default: {} },
   },
   { timestamps: true }

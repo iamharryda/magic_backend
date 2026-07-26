@@ -1,5 +1,6 @@
 import { stripe, CURRENCY, FRONTEND_URL, toMinorUnits } from '../../core/config/stripe.js';
 import Donation from './donation.model.js';
+import { sendDonationEmails } from '../../lib/emailTemplates.js';
 
 export const DonationService = {
   /**
@@ -71,9 +72,24 @@ export const DonationService = {
     const donationId = session.metadata?.donationId;
     const update = { status: paid ? 'paid' : 'pending', paymentIntentId };
 
+    const previousDonation = donationId
+      ? await Donation.findById(donationId)
+      : await Donation.findOne({ checkoutSessionId: session.id });
+
     const donation = donationId
       ? await Donation.findByIdAndUpdate(donationId, update, { new: true })
       : await Donation.findOneAndUpdate({ checkoutSessionId: session.id }, update, { new: true });
+
+    // If status transitioned to paid, send emails to Donor and Admin
+    if (paid && previousDonation?.status !== 'paid' && donation) {
+      sendDonationEmails({
+        donorEmail: donation.donorEmail || session.customer_details?.email,
+        donorName: donation.donorName || session.customer_details?.name,
+        amount: donation.amount,
+        currency: donation.currency || CURRENCY,
+        message: donation.message,
+      }).catch((err) => console.error('Error sending donation emails:', err));
+    }
 
     return { paid, status: session.payment_status, donation };
   },
