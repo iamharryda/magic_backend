@@ -72,48 +72,6 @@ app.use("/uploads", express.static(uploadPath));
 app.use('/api', appRouter);
 
 
-
-// Socket IO connection
-io.on("connection", (socket) => {
-  console.log("New client connected", socket.id);
-
-  // Join a room for chat
-  socket.on("joinRoom", (room) => {
-    socket.join(`room-${room}`);
-    console.log(`Client ${socket.id} joined room: ${room}`);
-  });
-
-  // Leave a chat room
-  socket.on("leaveRoom", (room) => {
-    socket.leave(`room-${room}`);
-    console.log(`Client ${socket.id} left room: ${room}`);
-  });
-
-  // Register user for notifications
-  socket.on("registerUser", (userId) => {
-    socket.join(`user-${userId}`);
-    console.log(`Socket ${socket.id} joined user room: user-${userId}`);
-  });
-
-  // Join ride chat room
-  socket.on("joinRideChat", (rideId) => {
-    socket.join(`ride-${rideId}`);
-    console.log(`Client ${socket.id} joined ride chat: ${rideId}`);
-  });
-
-  // Leave ride chat room
-  socket.on("leaveRideChat", (rideId) => {
-    socket.leave(`ride-${rideId}`);
-    console.log(`Client ${socket.id} left ride chat: ${rideId}`);
-  });
-
-  socket.on("disconnect", () => {
-    console.log("Client disconnected", socket.id);
-  });
-});
-
-
-
 // Set up 404 error middleware
 app.use(notFound);
 
