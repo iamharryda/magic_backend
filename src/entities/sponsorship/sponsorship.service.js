@@ -265,5 +265,34 @@ export const SponsorshipService = {
       totalPages: Math.ceil(total / limit),
       total
     };
+  },
+
+  /**
+   * Sync incomplete sponsorships with Stripe to catch successful/expired payments
+   * that were missed because of missing webhooks or users closing tabs early.
+   */
+  async syncIncompleteSponsorships() {
+    const incompleteSponsorships = await Sponsorship.find({ status: 'incomplete' });
+    const results = { total: incompleteSponsorships.length, processed: 0, completed: 0, expired: 0 };
+
+    for (const sponsorship of incompleteSponsorships) {
+      if (!sponsorship.checkoutSessionId) continue;
+      
+      try {
+        const session = await stripe.checkout.sessions.retrieve(sponsorship.checkoutSessionId);
+        
+        // Only act on terminal states
+        if (session.status === 'complete' || session.status === 'expired') {
+          await this.confirmSetup(sponsorship.checkoutSessionId);
+          results.processed++;
+          if (session.status === 'complete') results.completed++;
+          if (session.status === 'expired') results.expired++;
+        }
+      } catch (err) {
+        console.error(`Failed to sync sponsorship ${sponsorship._id}:`, err.message);
+      }
+    }
+    
+    return results;
   }
 };

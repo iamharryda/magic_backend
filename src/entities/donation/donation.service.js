@@ -115,5 +115,34 @@ export const DonationService = {
       totalPages: Math.ceil(total / limit),
       total
     };
+  },
+
+  /**
+   * Sync pending donations with Stripe to catch successful/expired payments
+   * that were missed because of missing webhooks or users closing tabs early.
+   */
+  async syncPendingDonations() {
+    const pendingDonations = await Donation.find({ status: 'pending' });
+    const results = { total: pendingDonations.length, processed: 0, completed: 0, expired: 0 };
+
+    for (const donation of pendingDonations) {
+      if (!donation.checkoutSessionId) continue;
+      
+      try {
+        const session = await stripe.checkout.sessions.retrieve(donation.checkoutSessionId);
+        
+        // Only act on terminal states
+        if (session.status === 'complete' || session.status === 'expired') {
+          await this.confirm(donation.checkoutSessionId);
+          results.processed++;
+          if (session.status === 'complete') results.completed++;
+          if (session.status === 'expired') results.expired++;
+        }
+      } catch (err) {
+        console.error(`Failed to sync donation ${donation._id}:`, err.message);
+      }
+    }
+    
+    return results;
   }
 };
