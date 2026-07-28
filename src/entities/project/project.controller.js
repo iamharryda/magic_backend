@@ -5,7 +5,7 @@ export const ProjectController = {
   // POST /api/v1/project
   async create(req, res, next) {
     try {
-      const { title, body, status, tags, publishedDate } = req.body;
+      const { title, body, coverPhoto, status, tags, publishedDate } = req.body;
 
       if (!title || !body) {
         return generateResponse(res, 400, false, 'Title and body are required', null);
@@ -14,6 +14,7 @@ export const ProjectController = {
       const project = await ProjectService.createProject({
         title,
         body,
+        coverPhoto,
         status,
         tags,
         publishedDate,

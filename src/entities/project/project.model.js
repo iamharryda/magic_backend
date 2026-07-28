@@ -25,6 +25,10 @@ const projectSchema = new mongoose.Schema(
       required: [true, 'Project body is required'],
       trim: true,
     },
+    coverPhoto: {
+      type: String,
+      trim: true,
+    },
     status: {
       type: String,
       enum: {

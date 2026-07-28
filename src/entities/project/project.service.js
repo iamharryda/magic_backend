@@ -2,10 +2,11 @@ import Project from './project.model.js';
 
 export const ProjectService = {
   async createProject(data) {
-    const { title, body, status, tags, publishedDate } = data;
+    const { title, body, coverPhoto, status, tags, publishedDate } = data;
     const project = new Project({
       title,
       body,
+      coverPhoto,
       status,
       tags,
       publishedDate: publishedDate || undefined,
@@ -59,7 +60,7 @@ export const ProjectService = {
       throw error;
     }
 
-    const allowedUpdates = ['title', 'body', 'status', 'tags', 'publishedDate'];
+    const allowedUpdates = ['title', 'body', 'coverPhoto', 'status', 'tags', 'publishedDate'];
     allowedUpdates.forEach((field) => {
       if (updateData[field] !== undefined) {
         project[field] = updateData[field];
